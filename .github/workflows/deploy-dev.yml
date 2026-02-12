@@ -60,8 +60,6 @@ jobs:
         run: |
           echo "Deploying Image: ${{ inputs.image_uri }}"
 
-          ECR_REGISTRY=$(echo ${{ inputs.image_uri }} | cut -d/ -f1)
-          
           # SSM 명령 전송 (비동기)
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.find-instance.outputs.INSTANCE_ID }}" \
@@ -72,10 +70,15 @@ jobs:
               "cd /home/ssm-user/app", 
               
               "echo \"1. Login to ECR\"",
-              "aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin '$ECR_REGISTRY'",
+              "ECR_REGISTRY=$(echo ${{ inputs.image_uri }} | cut -d/ -f1),"
+              "aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin $ECR_REGISTRY",
               
-              "echo \"2. Set Environment Variable for Image\"",
+              "echo \"2. Set Environment Variable\"",
+              "export ECR_REGISTRY=$ECR_REGISTRY",
               "export BACKEND_IMAGE_URI=${{ inputs.image_uri }}",
+
+              "echo \"--- Debug: Check Configuration ---\"",
+              "docker compose config",
               
               "echo \"3. Pull New Image\"",
               "docker compose pull backend",

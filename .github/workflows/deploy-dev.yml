@@ -62,7 +62,7 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.find-instance.outputs.INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
-            --comment "Deploying ${{ inputs.image_uri }}" \
+            --comment "Deploying backend to Dev" \
             --parameters commands='[
               "echo \"=== Start Deployment ===\"",
               "cd /home/ubuntu", 

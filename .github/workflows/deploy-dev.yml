@@ -86,7 +86,7 @@ jobs:
               "echo \"5. Health Check & Verification (Critical Step)\"",
               "echo \"Waiting for Backend to be ready...\"",
 
-              # 최대 60초 대기 (5초 * 12회)
+              "# 최대 60초 대기 (5초 * 12회)",
               "FOR_LIMIT=12",
               "for i in $(seq 1 $FOR_LIMIT); do",
               "  # 5-1. 컨테이너가 실행 중인지 확인",

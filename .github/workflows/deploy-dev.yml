@@ -1,4 +1,4 @@
-name: Deploy Dev (SSM Helper)
+name: Backend Deploy to Dev
 
 on:
   workflow_call:
@@ -111,8 +111,8 @@ jobs:
               " # 6. 루프가 끝날 때까지 성공 못하면 타임아웃 처리",
               "echo \"❌ Deployment Failed: Health Check Timed Out!\"",
               "echo \"=== Container Logs ===\"",
-              "docker compose logs backend --tail 50", # 실패 시 로그 보여주기
-              "exit 1"
+              "docker compose logs backend --tail 50",
+              "exit 1",
             ]' \
             --query "Command.CommandId" \
             --output text)

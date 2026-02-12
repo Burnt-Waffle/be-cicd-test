@@ -22,11 +22,13 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup JDK 25
+      - name: Setup JDK 21 and 25
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
-          java-version: '25'
+          java-version: |
+            21
+            25
 
       # Gradle 빌드 캐시 (선택적, 더 빠른 빌드)
       - name: Setup Gradle

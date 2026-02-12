@@ -69,7 +69,7 @@ jobs:
             --comment "Deploying backend to Dev" \
             --parameters commands='[
               "echo \"=== Start Deployment ===\"",
-              "cd /home/ubuntu/app", 
+              "cd /home/ssm-user/app", 
               
               "echo \"1. Login to ECR\"",
               "aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin '$ECR_REGISTRY'",

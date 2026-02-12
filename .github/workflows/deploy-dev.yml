@@ -70,7 +70,7 @@ jobs:
               "cd /home/ssm-user/app", 
               
               "echo \"1. Login to ECR\"",
-              "ECR_REGISTRY=$(echo ${{ inputs.image_uri }} | cut -d/ -f1),"
+              "ECR_REGISTRY=$(echo ${{ inputs.image_uri }} | cut -d/ -f1)",
               "aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin $ECR_REGISTRY",
               
               "echo \"2. Set Environment Variable\"",

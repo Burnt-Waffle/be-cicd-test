@@ -116,14 +116,14 @@ jobs:
           aws ecr put-image \
             --repository-name $ECR_REPOSITORY \
             --image-tag $TARGET_TAG \
-            --image-manifest "$MANIFEST"
+            --image-manifest "$MANIFEST" || echo "Image $TARGET_TAG already exists. Skipping retag."
             
           # 2. 환경별 Latest 태그 붙이기
           if [[ "$BASE_BRANCH" == "dev" ]]; then
-            aws ecr put-image --repository-name $ECR_REPOSITORY --image-tag dev-latest --image-manifest "$MANIFEST" || true
+            aws ecr put-image --repository-name $ECR_REPOSITORY --image-tag dev-latest --image-manifest "$MANIFEST" || echo "dev-latest already exists on this image. Skipping."
           elif [[ "$BASE_BRANCH" == "main" ]]; then
-            aws ecr put-image --repository-name $ECR_REPOSITORY --image-tag staging-latest --image-manifest "$MANIFEST" || true
-            aws ecr put-image --repository-name $ECR_REPOSITORY --image-tag prod-latest --image-manifest "$MANIFEST" || true
+            aws ecr put-image --repository-name $ECR_REPOSITORY --image-tag staging-latest --image-manifest "$MANIFEST" || echo "staging-latest already exists on this image. Skipping."
+            aws ecr put-image --repository-name $ECR_REPOSITORY --image-tag prod-latest --image-manifest "$MANIFEST" || echo "prod-latest already exists on this image. Skipping."
           fi
           
           # 최종적으로 배포에 사용할 URI 출력

@@ -37,3 +37,13 @@ tasks.named('wrapper') {
 tasks.named('jar') {
     enabled = false
 }
+
+tasks.withType(JavaCompile) {
+    // JDK 25를 쓰더라도, 클래스 파일은 Java 21 버전(v65)으로 생성함.
+    // 이렇게 해야 Spring Boot가 "어? 내가 아는 버전이네?" 하고 에러를 안 냄.
+    options.release = 21
+    
+    // 만약 Java 25의 프리뷰 기능(새로운 문법)을 쓰고 싶다면 아래 주석을 풀고 release를 25로 해야 하지만,
+    // 현재 스프링 버전에서는 21로 낮추는 게 가장 안전함.
+    // options.compilerArgs += "--enable-preview"
+}

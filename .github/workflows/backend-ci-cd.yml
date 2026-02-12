@@ -1,0 +1,164 @@
+name: Backend CI/CD (Docker + ECR)
+
+on:
+  pull_request:
+    types: [opened, synchronize, closed]
+    branches: [dev, main]
+
+permissions:
+  id-token: write # AWS OIDC 인증
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: backend
+
+jobs:
+  # 1. 빌드 및 도커 이미지 푸시 (CI)
+  build-and-push:
+    if: github.event.action == 'opened' || github.event.action == 'synchronize'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+
+      # Gradle 빌드 캐시 (선택적, 더 빠른 빌드)
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3 # 빌드 캐싱
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Gradle 빌드 (테스트 제외 - 속도 최적화, 필요시 포함)
+      - name: Build with Gradle
+        run: ./gradlew build -x test
+
+      # 빌드된 JAR 이름을 고정된 이름으로 변경 (Dockerfile COPY 편의성)
+      - name: Rename JAR
+        run: mv build/libs/*.jar backend-app.jar
+
+      # AWS 자격 증명 설정 (OIDC 방식)
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ECR 로그인
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 도커 이미지 빌드 및 푸시
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:pr-$PR_HEAD_SHA .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:pr-$PR_HEAD_SHA
+
+  # 2. 이미지 리태깅 (Merge 시 실행)
+  promote-image:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    outputs:
+      # Deploy에서 사용할 최종 이미지 URI 전달
+      final_image_uri: ${{ steps.retag.outputs.FINAL_URI }}
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Retag Image
+        id: retag
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          # 1. 원본 태그 (PR 때 빌드한 것)
+          SOURCE_TAG: pr-${{ github.event.pull_request.head.sha }}
+          # 2. 목표 태그 (실제 배포될 Merge Commit SHA)
+          TARGET_TAG: ${{ github.event.pull_request.merge_commit_sha }}
+          # 3. 브랜치 정보
+          BASE_BRANCH: ${{ github.base_ref }}
+        run: |
+          echo "Finding image with tag: $SOURCE_TAG..."
+          
+          # 매니페스트 가져오기 (이미지 찾기)
+          MANIFEST=$(aws ecr batch-get-image \
+            --repository-name $ECR_REPOSITORY \
+            --image-ids imageTag=$SOURCE_TAG \
+            --query 'images[].imageManifest' \
+            --output text)
+            
+          if [ -z "$MANIFEST" ] || [ "$MANIFEST" == "None" ]; then
+            echo "Error: Source image ($SOURCE_TAG) not found in ECR!"
+            exit 1
+          fi
+
+          echo "Image found! Retagging to: $TARGET_TAG"
+
+          # 1. Merge SHA 태그 붙이기
+          aws ecr put-image \
+            --repository-name $ECR_REPOSITORY \
+            --image-tag $TARGET_TAG \
+            --image-manifest "$MANIFEST"
+            
+          # 2. 환경별 Latest 태그 붙이기
+          if [[ "$BASE_BRANCH" == "dev" ]]; then
+            aws ecr put-image --repository-name $ECR_REPOSITORY --image-tag dev-latest --image-manifest "$MANIFEST" || true
+          elif [[ "$BASE_BRANCH" == "main" ]]; then
+            aws ecr put-image --repository-name $ECR_REPOSITORY --image-tag staging-latest --image-manifest "$MANIFEST" || true
+            aws ecr put-image --repository-name $ECR_REPOSITORY --image-tag prod-latest --image-manifest "$MANIFEST" || true
+          fi
+          
+          # 최종적으로 배포에 사용할 URI 출력
+          echo "FINAL_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$TARGET_TAG" >> $GITHUB_OUTPUT
+
+  # 2. Dev 배포 (dev 브랜치 Merge 시)  
+  deploy-dev:
+    needs: promote-image
+    if: github.event.pull_request.merged == true && github.base_ref == 'dev'
+    uses: ./.github/workflows/deploy-dev.yml
+    with:
+      environment: dev
+      image_uri: ${{ needs.promote-image.outputs.final_image_uri }}
+      instance_tag_name: "Environment" # EC2 태그 Key
+      instance_tag_value: "dev" # EC2 태그 Value
+    secrets: inherit
+
+#   # 3. Staging 배포 (main 브랜치 Merge 시)
+#   deploy-staging:
+#     needs: promote-image
+#     if: github.event.pull_request.merged == true && github.base_ref == 'main'
+#     uses: ./.github/workflows/deploy-asg-rolling.yml
+#     with:
+#       environment: staging
+#       image_uri: ${{ needs.promote-image.outputs.final_image_uri }}
+#       asg_name: "backend-staging-asg"
+#       lt_id: "lt-0xxxxxxxxxxxxxx" # Staging용 시작 템플릿 ID
+#     secrets: inherit
+  
+#   # 4. Production 배포 (Staging 성공 후 승인 필요)
+#   deploy-production:
+#     needs: [promote-image, deploy-staging]
+#     if: github.event.pull_request.merged == true && github.base_ref == 'main'
+#     uses: ./.github/workflows/deploy-asg-rolling.yml
+#     with:
+#       environment: production
+#       image_uri: ${{needs.promote-image.outputs.final_image_uri}}
+#       asg_name: "backend-prod-asg"
+#       lt_id: "lt-yyyyyyyy"
+#     secrets: inherit

@@ -23,6 +23,9 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  AWS_REGION: ap-northeast-2
+
 jobs:
   deploy-via-ssm:
     runs-on: ubuntu-latest
@@ -32,7 +35,7 @@ jobs:
         with:
           # OIDC를 사용하므로 Role ARN을 Secrets에서 가져옴
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ap-northeast-2
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Find Target Instance
         id: find-instance
@@ -56,19 +59,20 @@ jobs:
       - name: Send SSM Command (Docker Compose Up)
         run: |
           echo "Deploying Image: ${{ inputs.image_uri }}"
+
+          ECR_REGISTRY=$(echo ${{ inputs.image_uri }} | cut -d/ -f1)
           
           # SSM 명령 전송 (비동기)
-          # 주의: EC2 내부의 docker-compose.yml 경로를 본인 환경에 맞게 수정해야 함 (/home/ec2-user/app 등)
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.find-instance.outputs.INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
             --comment "Deploying backend to Dev" \
             --parameters commands='[
               "echo \"=== Start Deployment ===\"",
-              "cd /home/ubuntu", 
+              "cd /home/ubuntu/app", 
               
               "echo \"1. Login to ECR\"",
-              "aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin $(echo ${{ inputs.image_uri }} | cut -d/ -f1)",
+              "aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin '$ECR_REGISTRY'",
               
               "echo \"2. Set Environment Variable for Image\"",
               "export BACKEND_IMAGE_URI=${{ inputs.image_uri }}",
@@ -78,10 +82,37 @@ jobs:
               
               "echo \"4. Restart Container (Rolling Update style)\"",
               "docker compose up -d backend",
+
+              "echo \"5. Health Check & Verification (Critical Step)\"",
+              "echo \"Waiting for Backend to be ready...\"",
+
+              # 최대 60초 대기 (5초 * 12회)
+              "FOR_LIMIT=12",
+              "for i in $(seq 1 $FOR_LIMIT); do",
+              "  # 5-1. 컨테이너가 실행 중인지 확인",
+              "  if [ -z \"$(docker compose ps -q backend)\" ]; then",
+              "    echo \"❌ Container is not running!\"",
+              "    docker compose logs backend --tail 20",
+              "    exit 1",
+              "  fi",
               
-              "echo \"5. Cleanup Unused Images\"",
-              "docker image prune -f",
-              "echo \"=== Deployment Completed ===\""
+              "  # 5-2. API 응답 확인 (Health Check)",
+              "  # curl -f: 실패 시 에러 코드 반환, -s: 조용히",
+              "  if curl -s -f http://localhost:8080/health > /dev/null; then",
+              "    echo \"✅ Health Check Passed! Deployment Complete.\"",
+              "    docker image prune -f",
+              "    exit 0",
+              "  fi",
+              
+              "  echo \"⏳ App is starting... ($i/$FOR_LIMIT)\"",
+              "  sleep 5",
+              "done",
+              
+              " # 6. 루프가 끝날 때까지 성공 못하면 타임아웃 처리"
+              "echo \"❌ Deployment Failed: Health Check Timed Out!\"",
+              "echo \"=== Container Logs ===\"",
+              "docker compose logs backend --tail 50", # 실패 시 로그 보여주기
+              "exit 1"
             ]' \
             --query "Command.CommandId" \
             --output text)

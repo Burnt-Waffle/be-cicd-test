@@ -33,3 +33,7 @@ tasks.named('test') {
 tasks.named('wrapper') {
     gradleVersion = '9.3.1'
 }
+
+tasks.named('jar') {
+    enabled = false
+}

@@ -4,7 +4,7 @@ FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app
 
 # JAR 파일 복사
-COPY backend-*.jar app.jar
+COPY backend-app.jar app.jar
 
 # 비루트 사용자로 실행
 USER nobody

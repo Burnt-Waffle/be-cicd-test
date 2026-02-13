@@ -43,7 +43,11 @@ jobs:
 
       # 빌드된 JAR 이름을 고정된 이름으로 변경 (Dockerfile COPY 편의성)
       - name: Rename JAR
-        run: mv build/libs/*.jar backend-app.jar
+        run: |
+          JAR_FILE=$(find build/libs -name "*.jar" | head -n 1)
+          if [ -f "$JAR_FILE" ]; then
+            mv "$JAR_FILE" backend-app.jar
+          fi
 
       # AWS 자격 증명 설정 (OIDC 방식)
       - name: Configure AWS Credentials

@@ -214,22 +214,22 @@ jobs:
     secrets: inherit
 
   # 3. Staging 배포 (main 브랜치 Merge 시)
-  deploy-staging:
-    needs: promote-image
-    if: github.event.pull_request.merged == true && github.base_ref == 'main'
-    uses: ./.github/workflows/deploy-asg-rolling.yml
-    with:
-      environment: staging
-      image_uri: ${{ needs.promote-image.outputs.final_image_uri }}
-      asg_name: "backend-staging-asg"
-      lt_id: "lt-0xxxxxxxxxxxxxx" # Staging용 시작 템플릿 ID
-      pr_number: ${{ github.event.pull_request.number }}
-      pr_title: ${{ github.event.pull_request.title }}
-      base_ref: ${{ github.base_ref }}
-      actor: ${{ github.actor }}
-      run_id: ${{ github.run_id }}
-      repository: ${{ github.repository }}
-    secrets: inherit
+  # deploy-staging:
+  #   needs: promote-image
+  #   if: github.event.pull_request.merged == true && github.base_ref == 'main'
+  #   uses: ./.github/workflows/deploy-asg-rolling.yml
+  #   with:
+  #     environment: staging
+  #     image_uri: ${{ needs.promote-image.outputs.final_image_uri }}
+  #     asg_name: "backend-staging-asg"
+  #     lt_id: "lt-0xxxxxxxxxxxxxx" # Staging용 시작 템플릿 ID
+  #     pr_number: ${{ github.event.pull_request.number }}
+  #     pr_title: ${{ github.event.pull_request.title }}
+  #     base_ref: ${{ github.base_ref }}
+  #     actor: ${{ github.actor }}
+  #     run_id: ${{ github.run_id }}
+  #     repository: ${{ github.repository }}
+  #   secrets: inherit
   
 #   # 4. Production 배포 (Staging 성공 후 승인 필요)
 #   deploy-production:

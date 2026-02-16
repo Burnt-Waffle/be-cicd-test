@@ -189,7 +189,7 @@ jobs:
             aws ecr put-image --repository-name $ECR_REPOSITORY --image-tag dev-latest --image-manifest "$MANIFEST" || echo "dev-latest already exists on this image. Skipping."
           elif [[ "$BASE_BRANCH" == "main" ]]; then
             aws ecr put-image --repository-name $ECR_REPOSITORY --image-tag staging-latest --image-manifest "$MANIFEST" || echo "staging-latest already exists on this image. Skipping."
-            aws ecr put-image --repository-name $ECR_REPOSITORY --image-tag prod-latest --image-manifest "$MANIFEST" || echo "prod-latest already exists on this image. Skipping."
+            aws ecr put-image --repository-name $ECR_REPOSITORY --image-tag production-latest --image-manifest "$MANIFEST" || echo "production-latest already exists on this image. Skipping."
           fi
           
           # 최종적으로 배포에 사용할 URI 출력
@@ -214,31 +214,37 @@ jobs:
     secrets: inherit
 
   # 3. Staging 배포 (main 브랜치 Merge 시)
-  # deploy-staging:
-  #   needs: promote-image
-  #   if: github.event.pull_request.merged == true && github.base_ref == 'main'
-  #   uses: ./.github/workflows/deploy-asg-rolling.yml
-  #   with:
-  #     environment: staging
-  #     image_uri: ${{ needs.promote-image.outputs.final_image_uri }}
-  #     asg_name: "backend-staging-asg"
-  #     lt_id: "lt-0xxxxxxxxxxxxxx" # Staging용 시작 템플릿 ID
-  #     pr_number: ${{ github.event.pull_request.number }}
-  #     pr_title: ${{ github.event.pull_request.title }}
-  #     base_ref: ${{ github.base_ref }}
-  #     actor: ${{ github.actor }}
-  #     run_id: ${{ github.run_id }}
-  #     repository: ${{ github.repository }}
-  #   secrets: inherit
+  deploy-staging:
+    needs: promote-image
+    if: github.event.pull_request.merged == true && github.base_ref == 'main'
+    uses: ./.github/workflows/deploy-asg-rolling.yml
+    with:
+      environment: staging
+      image_uri: ${{ needs.promote-image.outputs.final_image_uri }}
+      asg_name: "raisedeveloper-backend-staging-asg"
+      lt_id: "lt-011782f0d653730e9" # Staging용 시작 템플릿 ID
+      pr_number: ${{ github.event.pull_request.number }}
+      pr_title: ${{ github.event.pull_request.title }}
+      base_ref: ${{ github.base_ref }}
+      actor: ${{ github.actor }}
+      run_id: ${{ github.run_id }}
+      repository: ${{ github.repository }}
+    secrets: inherit
   
-#   # 4. Production 배포 (Staging 성공 후 승인 필요)
-#   deploy-production:
-#     needs: [promote-image, deploy-staging]
-#     if: github.event.pull_request.merged == true && github.base_ref == 'main'
-#     uses: ./.github/workflows/deploy-asg-rolling.yml
-#     with:
-#       environment: production
-#       image_uri: ${{needs.promote-image.outputs.final_image_uri}}
-#       asg_name: "backend-prod-asg"
-#       lt_id: "lt-yyyyyyyy"
-#     secrets: inherit
+  # 4. Production 배포 (Staging 성공 후 승인 필요)
+  deploy-production:
+    needs: [promote-image, deploy-staging]
+    if: github.event.pull_request.merged == true && github.base_ref == 'main'
+    uses: ./.github/workflows/deploy-asg-rolling.yml
+    with:
+      environment: production
+      image_uri: ${{needs.promote-image.outputs.final_image_uri}}
+      asg_name: "raisedeveloper-backend-production-asg"
+      lt_id: "lt-0dff81551d19e465f"
+      pr_number: ${{ github.event.pull_request.number }}
+      pr_title: ${{ github.event.pull_request.title }}
+      base_ref: ${{ github.base_ref }}
+      actor: ${{ github.actor }}
+      run_id: ${{ github.run_id }}
+      repository: ${{ github.repository }}
+    secrets: inherit

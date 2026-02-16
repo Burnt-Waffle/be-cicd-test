@@ -100,7 +100,9 @@ jobs:
             --comment "Deploying backend to Dev" \
             --parameters commands='[
               "echo \"=== Start Deployment ===\"",
-              "cd /home/ssm-user/app", 
+
+              "mkdir -p /home/ubuntu/app",
+              "cd /home/ubuntu/app", 
               
               "echo \"1. Login to ECR\"",
               "ECR_REGISTRY=$(echo ${{ inputs.image_uri }} | cut -d/ -f1)",
@@ -118,12 +120,12 @@ jobs:
               "fi",
               
               "echo \"3. Pull New Image\"",
-              "docker compose pull backend || { echo \"❌ Docker pull failed!\"; exit 1; }",
+              "docker compose pull backend || { echo \"Docker pull failed!\"; exit 1; }",
               
               "echo \"4. Restart Container\"",
               "docker compose up -d backend",
 
-              "echo \"5. Health Check & Verification (Critical Step)\"",
+              "echo \"5. Health Check & Verification\"",
               "echo \"Waiting for Backend to be ready...\"",
 
               "# 최대 60초 대기 (5초 * 12회)",
@@ -133,7 +135,7 @@ jobs:
               "for i in $(seq 1 $FOR_LIMIT); do",
               "  # 5-1. 컨테이너가 실행 중인지 확인",
               "  if [ -z \"$(docker compose ps -q backend)\" ]; then",
-              "    echo \"❌ Container is not running!\"",
+              "    echo \"Container is not running!\"",
               "    docker compose logs backend --tail 20",
               "    break",
               "  fi",
@@ -141,23 +143,23 @@ jobs:
               "  # 5-2. API 응답 확인 (Health Check)",
               "  # curl -f: 실패 시 에러 코드 반환, -s: 조용히",
               "  if curl -s -f http://localhost:8080/health > /dev/null; then",
-              "    echo \"✅ Health Check Passed! Deployment Complete.\"",
+              "    echo \"Health Check Passed! Deployment Complete.\"",
               "    IS_HEALTHY=\"true\"",
               "    break",
               "  fi",
               
-              "  echo \"⏳ App is starting... ($i/$FOR_LIMIT)\"",
+              "  echo \"App is starting... ($i/$FOR_LIMIT)\"",
               "  sleep 5",
               "done",
 
               "if [ \"$IS_HEALTHY\" = \"true\" ]; then",
-              "  echo \"✅ Deployment Configured Successfully.\"",
+              "  echo \"Deployment Configured Successfully.\"",
               "  docker rmi backend:rollback-backup 2>/dev/null || true",
               "  docker image prune -f",
               "  exit 0",
 
               "else",
-              "  echo \"🚨 Health Check Failed! Initiating Rollback...\"",
+              "  echo \"Health Check Failed! Initiating Rollback...\"",
               
               "  # 롤백 실행: 백업해둔 이미지가 있는지 확인",
               "  if docker image inspect backend:rollback-backup > /dev/null 2>&1; then",
@@ -166,9 +168,9 @@ jobs:
               "    docker tag backend:rollback-backup $ECR_REGISTRY/backend:dev-latest",
               "    # 강제로 다시 컨테이너 생성",
               "    docker compose up -d --force-recreate backend",
-              "    echo \"✅ Rollback Complete. Server is running on previous version.\"",
+              "    echo \"Rollback Complete. Server is running on previous version.\"",
               "  else",
-              "    echo \"❌ No backup image found. Cannot rollback.\"",
+              "    echo \"No backup image found. Cannot rollback.\"",
               "  fi",
               
               "  # 롤백을 했더라도 배포 자체는 실패한 것이므로 exit 1",

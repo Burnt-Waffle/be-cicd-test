@@ -11,7 +11,7 @@ public class HealthController {
         return "Hello! Backend CI/CD Workflow is working correctly.";
     }
 
-    @GetMapping("/health")
+    @GetMapping("/api/actuator/health")
     public String health() {
         return "UP";
     }

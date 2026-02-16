@@ -199,8 +199,8 @@ jobs:
           # 인스턴스 리프레시 시작 명령
           REFRESH_ID=$(aws autoscaling start-instance-refresh \
             --auto-scaling-group-name ${{ inputs.asg_name }} \
-            --preferences "{\"MinHealthyPercentage\": $MIN_HEALTHY, \"InstanceWarmup\": 300, \"AutoRollback\": true}" \
-            --launch-template "LaunchTemplateId=${{ inputs.lt_id }},Version=${{ steps.update-lt.outputs.VERSION }}" \
+            --preferences "{\"MinHealthyPercentage\": $MIN_HEALTHY, \"InstanceWarmup\": 180, \"AutoRollback\": true}" \
+            --desired-configuration "{\"LaunchTemplate\":{\"LaunchTemplateId\":\"${{ inputs.lt_id }}\",\"Version\":\"${{ steps.update-lt.outputs.VERSION }}\"}}" \
             --query 'InstanceRefreshId' \
             --output text)
 

@@ -187,6 +187,21 @@ jobs:
         id: refresh
         run: |
           echo "Starting Instance Refresh for ASG: ${{ inputs.asg_name }}..."
+
+          # 기존에 진행 중인 리프레시가 있는지 확인하고 취소
+          CURRENT_REFRESH_ID=$(aws autoscaling describe-instance-refreshes \
+            --auto-scaling-group-name ${{ inputs.asg_name }} \
+            --query 'InstanceRefreshes[?Status==`InProgress`].InstanceRefreshId' \
+            --output text)
+            
+          if [ ! -z "$CURRENT_REFRESH_ID" ] && [ "$CURRENT_REFRESH_ID" != "None" ]; then
+            echo "Found in-progress refresh ($CURRENT_REFRESH_ID). Cancelling it now..."
+            aws autoscaling cancel-instance-refresh --auto-scaling-group-name ${{ inputs.asg_name }}
+            
+            # 취소될 때까지 잠시 대기
+            echo "Waiting for cancellation..."
+            sleep 10
+          fi
           
           # MinHealthyPercentage:
           # - Production (2대): 50% (1대는 죽이고 1대는 살림 -> 롤링)

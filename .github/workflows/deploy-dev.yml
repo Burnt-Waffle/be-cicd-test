@@ -142,7 +142,7 @@ jobs:
               
               "  # 5-2. API 응답 확인 (Health Check)",
               "  # curl -f: 실패 시 에러 코드 반환, -s: 조용히",
-              "  if curl -s -f http://localhost:8080/health > /dev/null; then",
+              "  if curl -s -f http://localhost:8080/api/actuator/health > /dev/null; then",
               "    echo \"Health Check Passed! Deployment Complete.\"",
               "    IS_HEALTHY=\"true\"",
               "    break",

@@ -146,6 +146,8 @@ jobs:
       # 3. 시작 템플릿(Launch Template) 새 버전 생성
       - name: Create New Launch Template Version
         id: update-lt
+        env:
+          DEPLOY_TAG: ${{ env.DEPLOY_TAG }}
         run: |
           echo "Fetching current User Data for LT ID: ${{ inputs.lt_id }}..."
           
@@ -172,6 +174,7 @@ jobs:
           NEW_VERSION=$(aws ec2 create-launch-template-version \
             --launch-template-id ${{ inputs.lt_id }} \
             --source-version "\$Latest" \
+            --version-description "Release ${{ env.DEPLOY_TAG }}" \
             --launch-template-data "{\"UserData\":\"$NEW_USER_DATA_BASE64\"}" \
             --query 'LaunchTemplateVersion.VersionNumber' \
             --output text)
@@ -245,6 +248,18 @@ jobs:
             sleep 10
           done
 
+      # 6. 성공 시 ASG 설정을 최신 버전으로 확정
+      - name: Update ASG Configuration to New Version
+        if: success()
+        run: |
+          echo "Updating ASG to use Version ${{ steps.update-lt.outputs.VERSION }}..."
+          
+          aws autoscaling update-auto-scaling-group \
+            --auto-scaling-group-name ${{ inputs.asg_name }} \
+            --launch-template "LaunchTemplateId=${{ inputs.lt_id }},Version=${{ steps.update-lt.outputs.VERSION }}"
+
+          echo "ASG Default Version Updated!"
+
       # 현재 시간 구하기 (KST)
       - name: Get Current Time
         if: always()
@@ -263,7 +278,7 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
           DISCORD_EMBEDS: |
             [{
-              "title": "✅ ${{ inputs.environment }} 배포(Rolling) 성공",
+              "title": "✅ ${{ inputs.environment }} BE 배포(CD) 성공",
               "color": 5763719,
               "fields": [
                 {"name": "Repository", "value": "${{ inputs.repository }}", "inline": false},
@@ -280,7 +295,7 @@ jobs:
             }]
         uses: Ilshidur/action-discord@0.4.0
         with:
-          args: '${{ inputs.environment }} 롤링 배포 완료! <@&${{ secrets.DISCORD_ROLE_BACKEND }}>'
+          args: '${{ inputs.environment }} 배포 완료! <@&${{ secrets.DISCORD_ROLE_BACKEND }}>'
 
       # 실패 알림
       - name: Discord Notification - Failure
@@ -305,4 +320,4 @@ jobs:
             }]
         uses: Ilshidur/action-discord@0.4.0
         with:
-          args: '${{ inputs.environment }} 배포 실패! 긴급 점검 필요. <@&${{ secrets.DISCORD_ROLE_BACKEND_ONCALL }}>'
+          args: '${{ inputs.environment }} 배포 실패! 로그 확인 필요. <@&${{ secrets.DISCORD_ROLE_BACKEND_ONCALL }}>'

@@ -227,6 +227,8 @@ jobs:
 
       # 5. 배포 완료 대기 (Polling)
       - name: Wait for Instance Refresh
+        id: wait-refresh
+        timeout-minutes: 15
         run: |
           echo "Waiting for Instance Refresh to complete..."
           REFRESH_ID=${{ steps.refresh.outputs.REFRESH_ID }}

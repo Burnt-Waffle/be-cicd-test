@@ -47,6 +47,11 @@ on:
         required: true
       AWS_ROLE_ARN:
         required: true
+      STG_ALB_DNS:
+        required: true
+      PROD_ALB_DNS:
+        required: true
+
 
 permissions:
   id-token: write
@@ -228,7 +233,7 @@ jobs:
       # 5. 배포 완료 대기 (Polling)
       - name: Wait for Instance Refresh
         id: wait-refresh
-        timeout-minutes: 15
+        timeout-minutes: 10
         run: |
           echo "Waiting for Instance Refresh to complete..."
           REFRESH_ID=${{ steps.refresh.outputs.REFRESH_ID }}
@@ -276,6 +281,63 @@ jobs:
             --launch-template "LaunchTemplateId=${{ inputs.lt_id }},Version=${{ steps.update-lt.outputs.VERSION }}"
 
           echo "ASG Default Version Updated!"
+
+      # 7. ASG가 성공했다고 해도, 실제로 앱이 죽었는지 최종 확인
+      - name: Final Health Check Verification
+        if: success()
+        run: |
+          echo "Checking actual service health..."
+
+          # 나중에는 input environments로 도메인 경로로 바꾸기
+          if [[ "${{ inputs.environment }}" == "production" ]]; then
+            TARGET_URL="http://${{ secrets.PROD_ALB_DNS }}/api/actuator/health"
+          else
+            TARGET_URL="http://${{ secrets.STG_ALB_DNS }}/api/actuator/health"
+          fi
+          
+          # 30초 간격으로 5번 확인 (총 2분 30초 더 대기)
+          for i in {1..5}; do
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$TARGET_URL")
+            echo "Attempt $i: HTTP Status is $HTTP_STATUS"
+            
+            if [ "$HTTP_STATUS" == "200" ]; then
+              echo "App is UP and Healthy!"
+              exit 0
+            fi
+            
+            echo "App is not healthy yet. Waiting 30s..."
+            sleep 30
+          done
+          
+          echo "ASG said Success, but App is DEAD. Failing pipeline."
+          exit 1
+
+      - name: Verify Running Launch Template Version
+        if: success()
+        run: |
+          ASG_NAME=${{ inputs.asg_name }}
+          # 방금 배포한 버전
+          NEW_VERSION=${{ steps.update-lt.outputs.VERSION }}
+          
+          echo "Verifying if running instances are using Launch Template Version: $NEW_VERSION..."
+          
+          # 현재 Running 중인 인스턴스들의 LT 버전 조회
+          RUNNING_VERSIONS=$(aws autoscaling describe-auto-scaling-groups \
+            --auto-scaling-group-names $ASG_NAME \
+            --query 'AutoScalingGroups[0].Instances[?LifecycleState==`InService`].LaunchTemplate.Version' \
+            --output text)
+          
+          echo "Detected Running Versions: $RUNNING_VERSIONS"
+          
+          for v in $RUNNING_VERSIONS; do
+            if [ "$v" != "$NEW_VERSION" ]; then
+              echo "Mismatch Detected! Instance is running version $v, but expected $NEW_VERSION"
+              echo "Deployment seemed successful, but old instances are still running."
+              exit 1
+            fi
+          done
+          
+          echo "All instances are running the correct version."
 
       # 현재 시간 구하기 (KST)
       - name: Get Current Time

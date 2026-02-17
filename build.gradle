@@ -46,4 +46,4 @@ tasks.withType(JavaCompile) {
     // 만약 Java 25의 프리뷰 기능(새로운 문법)을 쓰고 싶다면 아래 주석을 풀고 release를 25로 해야 하지만,
     // 현재 스프링 버전에서는 21로 낮추는 게 가장 안전함.
     // options.compilerArgs += "--enable-preview"
-}
+} 
